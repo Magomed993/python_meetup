@@ -1,0 +1,4 @@
+python-telegram-bot==13.5
+Django==3.2.15
+environs[django]==9.3.2
+marshmallow==3.26.1
