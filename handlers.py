@@ -1,4 +1,4 @@
-from django.template.defaultfilters import first
+
 from telegram import Update
 from telegram.ext import CallbackContext
 
@@ -17,7 +17,7 @@ def get_current_speaker_for_question():
     return TARGET_SPEAKER_NAME_FOR_QUESTIONS
 
 
-def ask_quastion(update: Update, context: CallbackContext):
+def ask_question(update: Update, context: CallbackContext):
     """Обрабатывает команду /ask для отправки вопроса 'текущему' докладчику."""
     user = update.effective_user
 
