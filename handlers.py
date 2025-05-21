@@ -1,7 +1,46 @@
+from django.template.defaultfilters import first
 from telegram import Update
 from telegram.ext import CallbackContext
 
 from bot_utils import load_schedule_from_file
+
+
+TARGET_SPEAKER_NAME_FOR_QUESTIONS = "Неизвестный Спикер"
+
+def get_current_speaker_for_question():
+    """ MVP: Возвращает имя "текущего" спикера для вопросов."""
+    schedule =load_schedule_from_file()
+
+    if schedule:
+        first_talk =schedule[0]
+        return first_talk.get("speaker_name", "speaker-Not found")
+    return TARGET_SPEAKER_NAME_FOR_QUESTIONS
+
+
+def ask_quastion(update: Update, context: CallbackContext):
+    """Обрабатывает команду /ask для отправки вопроса 'текущему' докладчику."""
+    user = update.effective_user
+
+    if not context.args:
+        update.message.reply_text(
+            "Пожалуйста, напишите ваш вопрос после команды /ask.\n"
+            "Например: /ask Какой ваш любимый фреймворк?"
+        )
+        return
+
+    question_text = " ".join(context.args)
+    current_speaker_name = get_current_speaker_for_question()
+
+    print(f"\n--- Новый вопрос ---")
+    print(f"Для спикера: {current_speaker_name}")
+    print(f"От пользователя: {user.first_name}")
+    print(f"Вопрос: {question_text}")
+    print("-----------------\n")
+
+    update.message.reply_text(
+        f"Спасибо за ваш вопрос! Он 'отправлен' спикеру ({current_speaker_name}).\n"
+        f"Текст вашего вопроса: \"{question_text}\""
+    )
 
 
 def start(update: Update, context:
@@ -22,7 +61,6 @@ CallbackContext):
           f"{user.id} ({user.username or user.first_name})"
           f" запустил бота."
     )
-
 
 
 def show_schedule(update:Update, context: CallbackContext):
