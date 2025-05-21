@@ -1,7 +1,8 @@
+from datetime import datetime, time
 from telegram import Update
 from telegram.ext import CallbackContext
 
-from bot_utils import load_schedule_from_json, get_full_schedule
+from bot_utils import load_schedule_from_json, get_full_schedule, get_current_talk_details
 
 
 def get_current_speaker_for_question():
@@ -26,17 +27,32 @@ def ask_question(update: Update, context: CallbackContext):
         return
 
     question_text = " ".join(context.args)
-    current_speaker_name = get_current_speaker_for_question()
+    active_talk_details = get_current_talk_details()
+    if active_talk_details:
+        speaker_name = active_talk_details.get("speaker_name", "Неизвестный Спикер")
+        talk_title = active_talk_details.get("talk_title", "Текущий доклад")
 
-    print(f"\n--- Новый вопрос ---")
-    print(f"Для спикера: {current_speaker_name}")
-    print(f"От пользователя: {user.first_name}")
-    print(f"Вопрос: {question_text}")
-    print("-----------------\n")
+        response_to_user = (
+            f"Спасибо за ваш вопрос к докладу «{talk_title}» (спикер: {speaker_name})!\n"
+            f"Ваш вопрос: «{question_text}» был 'отправлен'."
+        )
 
+        print(f"\n--- Новый вопрос ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ---")
+        print(f"Для доклада: «{talk_title}» (Спикер: {speaker_name})")
+        print(f"От пользователя: {user.first_name} (ID: {user.id}, Username: {user.username or 'N/A'})")
+        print(f"Текст вопроса: {question_text}")
+        print("-----------------\n")
+    else:
+        response_to_user = (
+            "В данный момент нет активных докладов, которым можно было бы задать вопрос.\n"
+            "Пожалуйста, проверьте расписание (/schedule) и попробуйте позже."
+        )
+        print(f"\n--- Попытка задать вопрос вне активного доклада ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ---")
+        print(f"От пользователя: {user.first_name} (ID: {user.id}, Username: {user.username or 'N/A'})")
+        print(f"Текст предполагаемого вопроса: {question_text}")
+        print("-----------------\n")
     update.message.reply_text(
-        f"Спасибо за ваш вопрос! Он 'отправлен' спикеру ({current_speaker_name}).\n"
-        f"Текст вашего вопроса: \"{question_text}\""
+        response_to_user
     )
 
 
@@ -76,7 +92,7 @@ def show_schedule(update:Update, context: CallbackContext):
         start = entry_details.get("start_time", "Время не указано")
         end = entry_details.get("end_time", "Время не указано")
 
-        schedule_entries.append(
+        schedule_entries_text.append(
             f"Время доклада : {start} - {end}\n"
             f"Имя докладчика: {speaker}\n"
             f"Тема: {title}\n"
