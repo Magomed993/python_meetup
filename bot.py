@@ -1,15 +1,13 @@
 import os
+
 import django
-
 from environs import Env, EnvError
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import (CommandHandler, Updater)
 
-from handlers import start, show_schedule, ask_question
+from handlers import ask_question, show_schedule, start
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'meetup_bot_config.settings')
 django.setup()
-
-
 
 
 def main():
@@ -32,9 +30,10 @@ def main():
     dispatcher.add_handler(CommandHandler('ask', ask_question))
 
     updater.start_polling()
-    print("Бот запущен и ожидает сообщений...")
+    print('Бот запущен и ожидает сообщений...')
 
     updater.idle()
+
 
 if __name__ == '__main__':
     main()

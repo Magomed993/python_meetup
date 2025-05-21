@@ -21,3 +21,4 @@ db.sqlite3
 
 db.sqlite3
 dummy_schedule.json
+.flake8
