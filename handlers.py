@@ -1,20 +1,17 @@
-
 from telegram import Update
 from telegram.ext import CallbackContext
 
-from bot_utils import load_schedule_from_file
+from bot_utils import load_schedule_from_json, get_full_schedule
 
-
-TARGET_SPEAKER_NAME_FOR_QUESTIONS = "Неизвестный Спикер"
 
 def get_current_speaker_for_question():
     """ MVP: Возвращает имя "текущего" спикера для вопросов."""
-    schedule =load_schedule_from_file()
+    program_listing =load_schedule_from_json()
 
-    if schedule:
-        first_talk =schedule[0]
-        return first_talk.get("speaker_name", "speaker-Not found")
-    return TARGET_SPEAKER_NAME_FOR_QUESTIONS
+    if program_listing:
+        first_presentation = program_listing[0] if program_listing else {}
+        return first_presentation.get("speaker_name", "speaker-Not found")
+    return "Неизвестный Спикер"
 
 
 def ask_question(update: Update, context: CallbackContext):
@@ -65,15 +62,15 @@ CallbackContext):
 
 def show_schedule(update:Update, context: CallbackContext):
     """Отправляет пользователю программу мероприятия, загруженную из файла."""
-    loaded_schedule = load_schedule_from_file()
+    program_listing = get_full_schedule()
 
-    if not loaded_schedule:
+    if not program_listing:
         reply_text = "К сожалению, программа мероприятия пока не загружена или возникла ошибка при её чтении. Попробуйте позже."
         update.message.reply_text(reply_text)
         return
 
-    schedule_entries = ["Программа мероприятия:\n"]
-    for entry_details in loaded_schedule:
+    schedule_entries_text = ["Программа мероприятия:\n"]
+    for entry_details in program_listing:
         speaker = entry_details.get("speaker_name", "Не указан")
         title = entry_details.get("talk_title", "Без названия")
         start = entry_details.get("start_time", "Время не указано")
@@ -85,5 +82,5 @@ def show_schedule(update:Update, context: CallbackContext):
             f"Тема: {title}\n"
             "----------------------------------"
         )
-    full_schedule_text = "\n".join(schedule_entries)
+    full_schedule_text = "\n".join(schedule_entries_text)
     update.message.reply_text(full_schedule_text)
