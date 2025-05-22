@@ -44,6 +44,9 @@ def main():
                                           successful_payment_callback
                                           )
                            )
+
+    dispatcher.add_handler(MessageHandler(Filters.text('Расписание'), show_schedule))
+    dispatcher.add_handler(MessageHandler(Filters.text('Поддержать'), donate))
     updater.start_polling()
     print('Бот запущен и ожидает сообщений...')
 

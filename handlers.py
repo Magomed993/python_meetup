@@ -5,6 +5,7 @@ from telegram.ext import CallbackContext
 
 from bot_utils import (get_current_talk_details, get_full_schedule,
                        load_schedule_from_json)
+from reply_keyboards import get_main_keyboard
 
 
 def successful_payment_callback(update: Update, context: CallbackContext):
@@ -145,7 +146,7 @@ def ask_question(update: Update, context: CallbackContext):
 
 
 def start(update: Update, context: CallbackContext):
-    """Отправляет приветственное сообщение при команде /start."""
+    """Отправляет приветственное сообщение при команде /start и основную клавиатуру."""
     user = update.effective_user
     chat_id =update.effective_chat.id
     welcome_message = (
@@ -158,9 +159,13 @@ def start(update: Update, context: CallbackContext):
         f"-Получить эту справку (команда /help).\n\n"
         f"Используйте команды из меню или кнопки ниже для навигации."
     )
+
+    reply_markup = get_main_keyboard()
+
     context.bot.send_message(
         chat_id=chat_id,
-        text=welcome_message
+        text=welcome_message,
+        reply_markup=reply_markup
     )
     print(f'Пользователь '
           f'{user.id} ({user.username or user.first_name})'
