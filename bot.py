@@ -1,10 +1,12 @@
 import os
+from typing import ContextManager
 
 import django
 from environs import Env, EnvError
-from telegram.ext import (CommandHandler, Updater)
+from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler)
 
-from handlers import ask_question, show_schedule, start
+from handlers import (ask_question, show_schedule,
+                      start, donate, precheckout_callback)
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'meetup_bot_config.settings')
 django.setup()
@@ -17,17 +19,23 @@ def main():
 
     try:
         bot_token = env.str('TELEGRAM_TOKEN')
+        provider_token = env.str('TELEGRAM_PROVIDER_TOKEN')
     except EnvError as e:
-        print(f'В bot.py не удалось прочитать TELEGRAM_TOKEN. Ошибка {e}')
+        print(f'В bot.py не удалось прочитать TELEGRAM_TOKEN или TELEGRAM_PROVIDER_TOKEN. Ошибка {e}')
         return
 
     updater = Updater(bot_token, use_context=True)
 
     dispatcher = updater.dispatcher
 
+    dispatcher.bot_data['provider_token'] = provider_token
+
     dispatcher.add_handler(CommandHandler('start', start))
     dispatcher.add_handler(CommandHandler('schedule', show_schedule))
     dispatcher.add_handler(CommandHandler('ask', ask_question))
+    dispatcher.add_handler(CommandHandler('donate', donate))
+
+    dispatcher.add_handler(PreCheckoutQueryHandler(precheckout_callback))
 
     updater.start_polling()
     print('Бот запущен и ожидает сообщений...')

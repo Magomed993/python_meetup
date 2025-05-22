@@ -1,10 +1,72 @@
 from datetime import datetime
 
-from telegram import Update
+from telegram import Update, LabeledPrice
 from telegram.ext import CallbackContext
 
 from bot_utils import (get_current_talk_details, get_full_schedule,
                        load_schedule_from_json)
+
+
+def precheckout_callback(update:Update, context: CallbackContext):
+    """Обрабатывает PreCheckoutQuery, отправленный Telegram."""
+    query = update.pre_checkout_query
+    print(f"Получен PreCheckoutQuery: id={query.id}, payload={query.invoice_payload}, user_id={query.from_user.id}")
+
+
+    if query.invoice_payload != f'meetup_donation_{query.from_user.id}_{query.invoice_payload.split("_")[-1]}':
+        expected_prefix = f'meetup_donation_{query.from_user.id}'
+
+        if not query.invoice_payload.startswith(expected_prefix):
+            print(f'ОШИБКА: PreCheckoutQuery с неожиданным payload: {query.invoice_payload}')
+            context.bot.answer_pre_checkout_query(
+                pre_checkout_query_id=query.id,
+                ok=False,
+                error_message='Произошла ошибка при проверке платежа. Пожалуйста, попробуйте снова.'
+            )
+            return
+
+    context.bot.answer_pre_checkout_query(pre_checkout_query_id=query.id, ok=True)
+    print(f"Ответили ok=True на PreCheckoutQuery id={query.id}")
+
+
+def donate(update:Update, context: CallbackContext):
+    """Отправляет счет для доната."""
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+
+    title = 'Поддержка Python Meetup'
+    description = "Ваш вклад поможет сделать наши митапы еще лучше! Спасибо!"
+
+    payload_user_part = user.id if user else 'Unknown_user'
+    payload_time_part = int(datetime.now().timestamp())
+    payload = f'meetup_donation_{payload_user_part}_{payload_time_part}'
+
+    if 'provider_token' not in context.bot_data:
+        update.message.reply_text(
+            "Извините, функция донатов временно недоступна. (Ошибка конфигурации провайдера)"
+        )
+        print("ОШИБКА: provider_token не найден в context.bot_data при вызове /donate")
+        return
+
+    provider_token = context.bot_data['provider_token']
+    currency = 'RUB'
+
+    prices = [LabeledPrice("Донат на развитие митапа", 100 * 100)]
+
+    if context.bot:
+        context.bot.send_invoice(
+            chat_id=chat_id,
+            title=title,
+            description=description,
+            payload=payload,
+            provider_token=provider_token,
+            currency=currency,
+            prices=prices,
+        )
+    else:
+        update.message.reply_text(
+            "Произошла ошибка при попытке отправить счет. Пожалуйста, попробуйте позже. (Бот не доступен)")
+        print("ОШИБКА: context.bot не был доступен при вызове send_invoice")
 
 
 def get_current_speaker_for_question():
@@ -67,7 +129,7 @@ def start(update: Update, context: CallbackContext):
         '- Узнать программу мероприятия (/schedule)\n'
         '- Задать вопрос текущему докладчику (/ask)\n'
         # "- Познакомиться с другими участниками (скоро)\n"
-        # "- Поддержать организаторов (скоро)\n\n"
+        "- Поддержать организаторов (/donate)\n\n"
         'Пока это основное. Приятного митапа!'
     )
     update.message.reply_text(welcome_message)
