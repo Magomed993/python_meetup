@@ -1,18 +1,20 @@
 import os
-from typing import ContextManager
-
 import django
-from environs import Env, EnvError
-from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler, MessageHandler, Filters)
-
-from handlers import (ask_question, show_schedule,
-                      start, donate, precheckout_callback, successful_payment_callback,
-                      help_command)
-from bot_utils import set_bot_menu_commands
-
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'meetup_bot_config.settings')
 django.setup()
+
+from environs import Env, EnvError
+from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler, MessageHandler, Filters,
+                          ConversationHandler, CallbackQueryHandler)
+
+from handlers import (ask_question, show_schedule,
+                      start_command_handler, donate, precheckout_callback, successful_payment_callback,
+                      help_command, CHOOSE_ROLE, TYPING_ORGANIZER_PASSWORD,
+                      ROLE_GUEST_CALLBACK, ROLE_SPEAKER_CALLBACK, ROLE_ORGANIZER_CALLBACK,
+                      handle_guest_choice,  handle_speaker_choice, handle_organizer_choice_init
+                      )
+from bot_utils import set_bot_menu_commands
 
 
 def main():
@@ -35,7 +37,22 @@ def main():
 
     set_bot_menu_commands(updater)
 
-    dispatcher.add_handler(CommandHandler('start', start))
+    # --- Определяем ConversationHandler для выбора роли ---
+    role_conversation_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start_command_handler)],
+        states={
+            CHOOSE_ROLE: [
+                CallbackQueryHandler(handle_guest_choice, pattern=f"^{ROLE_GUEST_CALLBACK}$"),
+                CallbackQueryHandler(handle_speaker_choice, pattern=f"^{ROLE_SPEAKER_CALLBACK}$"),
+                CallbackQueryHandler(handle_organizer_choice_init, pattern=f"^{ROLE_ORGANIZER_CALLBACK}$"),
+            ],
+            TYPING_ORGANIZER_PASSWORD: [ ],
+        },
+        fallbacks=[ ],
+        allow_reentry=True
+    )
+
+    dispatcher.add_handler(role_conversation_handler)
     dispatcher.add_handler(CommandHandler('schedule', show_schedule))
     dispatcher.add_handler(CommandHandler('ask', ask_question))
     dispatcher.add_handler(CommandHandler('donate', donate))
