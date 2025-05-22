@@ -6,7 +6,8 @@ from environs import Env, EnvError
 from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler, MessageHandler, Filters)
 
 from handlers import (ask_question, show_schedule,
-                      start, donate, precheckout_callback, successful_payment_callback)
+                      start, donate, precheckout_callback, successful_payment_callback,
+                      help_command)
 from bot_utils import set_bot_menu_commands
 
 
@@ -38,6 +39,7 @@ def main():
     dispatcher.add_handler(CommandHandler('schedule', show_schedule))
     dispatcher.add_handler(CommandHandler('ask', ask_question))
     dispatcher.add_handler(CommandHandler('donate', donate))
+    dispatcher.add_handler(CommandHandler('help', help_command))
 
     dispatcher.add_handler(PreCheckoutQueryHandler(precheckout_callback))
     dispatcher.add_handler(MessageHandler(Filters.successful_payment,

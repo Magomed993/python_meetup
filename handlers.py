@@ -8,6 +8,29 @@ from bot_utils import (get_current_talk_details, get_full_schedule,
 from reply_keyboards import get_main_keyboard
 
 
+def help_command(update:Update, context:CallbackContext):
+    """Отправляет справочное сообщение пользователю."""
+    user = update.effective_user
+
+    help_text = (
+        "Справка по боту PythonMeetup\n\n"
+        "Я помогу вам на нашем мероприятии! Вот что я умею:\n\n"
+        "Основные команды:\n"
+        "- /start : Показать приветственное сообщение и основные кнопки.\n"
+        "- /schedule : Показать программу мероприятия.\n"
+        "- /ask <ваш вопрос> : Задать вопрос текущему докладчику.\n"
+        "  (Пример: /ask Какой ваш любимый цвет?)\n"
+        "- /donate : Поддержать наше мероприятие.\n"
+        "- /help : Показать это справочное сообщение.\n\n"
+        "Вы также можете использовать кнопки под полем ввода для быстрого доступа к основным функциям.\n\n"
+        "Если у вас возникли проблемы или есть предложения, пожалуйста, обратитесь к организаторам."
+    )
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=help_text
+    )
+
+
 def successful_payment_callback(update: Update, context: CallbackContext):
     """Обрабатывает успешный платеж."""
     payment_details = update.message.successful_payment
