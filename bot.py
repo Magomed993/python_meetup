@@ -7,6 +7,8 @@ from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler, Mess
 
 from handlers import (ask_question, show_schedule,
                       start, donate, precheckout_callback, successful_payment_callback)
+from bot_utils import set_bot_menu_commands
+
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'meetup_bot_config.settings')
 django.setup()
@@ -29,6 +31,8 @@ def main():
     dispatcher = updater.dispatcher
 
     dispatcher.bot_data['provider_token'] = provider_token
+
+    set_bot_menu_commands(updater)
 
     dispatcher.add_handler(CommandHandler('start', start))
     dispatcher.add_handler(CommandHandler('schedule', show_schedule))

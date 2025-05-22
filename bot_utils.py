@@ -1,5 +1,23 @@
 import json
+
 from datetime import datetime
+from telegram import BotCommand
+from telegram.ext import Updater
+
+
+def set_bot_menu_commands(updater:Updater):
+    """ Устанавливает список команд, отображаемых в кнопке 'Меню' Telegram."""
+    commands = [
+        BotCommand('start', 'Запустить/перезапустить бота'),
+        BotCommand('schedule', 'Программа мероприятия'),
+        BotCommand('ask', 'Задать вопрос спикеру'),
+        BotCommand('donate', 'Поддержать мероприятие'),
+        BotCommand('help', 'Помощь по боту')
+    ]
+    try:
+        updater.bot.set_my_commands(commands)
+    except Exception as e:
+        print(f'Ошибка при установке команд меню: {e}')
 
 
 def load_schedule_from_json(file_path='dummy_schedule.json'):

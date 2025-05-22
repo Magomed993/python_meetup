@@ -147,16 +147,21 @@ def ask_question(update: Update, context: CallbackContext):
 def start(update: Update, context: CallbackContext):
     """Отправляет приветственное сообщение при команде /start."""
     user = update.effective_user
+    chat_id =update.effective_chat.id
     welcome_message = (
-        f'Привет, {user.first_name}!\n\n'
-        'Я бот для PythonMeetup. Здесь ты сможешь:\n'
-        '- Узнать программу мероприятия (/schedule)\n'
-        '- Задать вопрос текущему докладчику (/ask)\n'
-        # "- Познакомиться с другими участниками (скоро)\n"
-        "- Поддержать организаторов (/donate)\n\n"
-        'Пока это основное. Приятного митапа!'
+        f"Привет, {user.first_name}!\n\n"
+        f"Добро пожаловать на PythonMeetup! Я ваш бот-помощник.\n\n"
+        f"Здесь вы можете:\n"
+        f"-Узнать программу мероприятия (команда /schedule или кнопка 'Расписание').\n"
+        f"-Задать вопрос текущему докладчику (команда /ask <ваш вопрос>).\n"
+        f"-Поддержать наше мероприятие (команда /donate или кнопка 'Поддержать').\n"
+        f"-Получить эту справку (команда /help).\n\n"
+        f"Используйте команды из меню или кнопки ниже для навигации."
     )
-    update.message.reply_text(welcome_message)
+    context.bot.send_message(
+        chat_id=chat_id,
+        text=welcome_message
+    )
     print(f'Пользователь '
           f'{user.id} ({user.username or user.first_name})'
           f' запустил бота.'
