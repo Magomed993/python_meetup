@@ -3,10 +3,10 @@ from typing import ContextManager
 
 import django
 from environs import Env, EnvError
-from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler)
+from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler, MessageHandler, Filters)
 
 from handlers import (ask_question, show_schedule,
-                      start, donate, precheckout_callback)
+                      start, donate, precheckout_callback, successful_payment_callback)
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'meetup_bot_config.settings')
 django.setup()
@@ -36,7 +36,10 @@ def main():
     dispatcher.add_handler(CommandHandler('donate', donate))
 
     dispatcher.add_handler(PreCheckoutQueryHandler(precheckout_callback))
-
+    dispatcher.add_handler(MessageHandler(Filters.successful_payment,
+                                          successful_payment_callback
+                                          )
+                           )
     updater.start_polling()
     print('Бот запущен и ожидает сообщений...')
 

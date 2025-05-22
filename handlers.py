@@ -7,11 +7,35 @@ from bot_utils import (get_current_talk_details, get_full_schedule,
                        load_schedule_from_json)
 
 
+def successful_payment_callback(update: Update, context: CallbackContext):
+    """Обрабатывает успешный платеж."""
+    payment_details = update.message.successful_payment
+    user = update.effective_user
+
+    currency = payment_details.currency
+    total_amount = payment_details.total_amount
+    invoice_payload = payment_details.invoice_payload
+    readable_amount = total_amount / 100
+
+    user_representation = (f'{user.first_name} (ID: {user.id}, Username:'
+                           f' {user.username or "N/A"})') if user else 'Неизвестный пользователь'
+    print('\n--- УСПЕШНЫЙ ПЛАТЕЖ ---')
+    print(f'Пользователь: {user_representation}')
+    print('-------------------------------------')
+
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=(
+            f'Спасибо большое, {user.first_name if user else "дорогой друг"}, за вашу поддержку в размере {readable_amount} {currency}!\n'
+            f'Ваш вклад очень важен для нас. Payload вашего платежа: {invoice_payload}.'
+        )
+    )
+
+
 def precheckout_callback(update:Update, context: CallbackContext):
     """Обрабатывает PreCheckoutQuery, отправленный Telegram."""
     query = update.pre_checkout_query
     print(f"Получен PreCheckoutQuery: id={query.id}, payload={query.invoice_payload}, user_id={query.from_user.id}")
-
 
     if query.invoice_payload != f'meetup_donation_{query.from_user.id}_{query.invoice_payload.split("_")[-1]}':
         expected_prefix = f'meetup_donation_{query.from_user.id}'
