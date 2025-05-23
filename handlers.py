@@ -379,3 +379,55 @@ def handle_organizer_choice_init(update: Update, context: CallbackContext) :
 
     return TYPING_ORGANIZER_PASSWORD  #Переходим в состояние TYPING_ORGANIZER_PASSWORD (число 1)
 
+
+def handle_organizer_password(update: Update, context: CallbackContext):
+    """Обрабатывает введенный пароль организатора."""
+    user = update.effective_user
+    entered_password = update.message.text
+
+    print(f"Пользователь {user.id} ввел пароль организатора: '{entered_password}'")
+
+    env = Env()
+    env.read_env()
+
+    expected_password = env.str("ORGANIZER_PASSWORD", default="").strip()
+
+    if not expected_password:
+        print("ОШИБКА: Пароль организатора (ORGANIZER_PASSWORD) не задан в .env файле.")
+        update.message.reply_text(
+            "Произошла системная ошибка конфигурации. Пожалуйста, сообщите администратору."
+        )
+        return ConversationHandler.END
+
+    user_tg_instance = UserTg.objects.get(tg_id=user.id)
+
+    if entered_password == expected_password:
+        print(f"Пароль для пользователя {user.id} верный. Подтверждаем роль Организатора.")
+        user_tg_instance.is_organizator = True
+        user_tg_instance.save()
+
+        update.message.reply_text("Пароль верный! Вы вошли как Организатор.")
+        show_main_interface_for_role(update, context, role_name="Организатор")
+        return ConversationHandler.END
+    else:
+        print(f"Пароль для пользователя {user.id} неверный.")
+        update.message.reply_text(
+            "Неверный пароль. Пожалуйста, попробуйте ввести пароль еще раз."
+        )
+        return TYPING_ORGANIZER_PASSWORD
+
+def cancel_conversation(update: Update, context: CallbackContext):
+    """Отменяет текущий диалог выбора роли."""
+
+    user = update.effective_user
+    message_text = "Выбор роли отменен."
+
+    if update.message:
+        update.message.reply_text(message_text)
+    elif update.callback_query:
+        update.callback_query.answer() #ответ на коллбак
+        update.callback_query.edit_message_text(text=message_text)
+
+    print(f"Пользователь {user.id} отменил диалог.")
+
+    return ConversationHandler.END

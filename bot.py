@@ -12,7 +12,8 @@ from handlers import (ask_question, show_schedule,
                       start_command_handler, donate, precheckout_callback, successful_payment_callback,
                       help_command, CHOOSE_ROLE, TYPING_ORGANIZER_PASSWORD,
                       ROLE_GUEST_CALLBACK, ROLE_SPEAKER_CALLBACK, ROLE_ORGANIZER_CALLBACK,
-                      handle_guest_choice,  handle_speaker_choice, handle_organizer_choice_init
+                      handle_guest_choice,  handle_speaker_choice, handle_organizer_choice_init,
+                      handle_organizer_password, cancel_conversation
                       )
 from bot_utils import set_bot_menu_commands
 
@@ -46,9 +47,13 @@ def main():
                 CallbackQueryHandler(handle_speaker_choice, pattern=f"^{ROLE_SPEAKER_CALLBACK}$"),
                 CallbackQueryHandler(handle_organizer_choice_init, pattern=f"^{ROLE_ORGANIZER_CALLBACK}$"),
             ],
-            TYPING_ORGANIZER_PASSWORD: [ ],
+            TYPING_ORGANIZER_PASSWORD: [
+                MessageHandler(Filters.text & ~Filters.command, handle_organizer_password)
+            ],
         },
-        fallbacks=[ ],
+        fallbacks=[
+            CommandHandler('cancel', cancel_conversation)
+        ],
         allow_reentry=True
     )
 
