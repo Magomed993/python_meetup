@@ -1,4 +1,3 @@
-
 from environs import Env, EnvError
 from pathlib import Path
 
@@ -15,7 +14,7 @@ except EnvError as e:
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
-DEBUG = True
+DEBUG = env.bool('DEBUG', False)
 
 ALLOWED_HOSTS = ["*"]
 

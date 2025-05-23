@@ -3,7 +3,6 @@ from phonenumber_field.modelfields import PhoneNumberField
 
 
 class UserTg(models.Model):
-
     tg_id = models.BigIntegerField("Телеграм id")
     nic_tg = models.CharField("Ник", max_length=50, null=True, blank=True)
     is_organizator = models.BooleanField("Организатор", default=False)
@@ -68,7 +67,7 @@ class Event(models.Model):
         "Место проведения", max_length=100, null=True)
     start_event = models.DateTimeField("Время начала", null=True)
     finish_event = models.DateTimeField("Время завершения", null=True)
-    # date = models.DateField("Дата", null=True)
+    date = models.DateField("Дата", null=True)
 
     def __str__(self):
         return f"{self.name}"
