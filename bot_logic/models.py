@@ -8,6 +8,7 @@ class UserTg(models.Model):
     tg_id = models.BigIntegerField("Телеграм id")
     nic_tg = models.CharField("Ник", max_length=50, null=True, blank=True)
     is_organizator = models.BooleanField("Организатор", default=False)
+    is_speaker = models.BooleanField("Спикер", default=False)
 
     def __str__(self):
         return f"{self.tg_id}"

@@ -5,7 +5,16 @@ from telegram.ext import CallbackContext, ConversationHandler
 
 from bot_utils import (get_current_talk_details, get_full_schedule,
                        load_schedule_from_json)
-from reply_keyboards import get_main_keyboard
+
+from keyboards import (
+    get_client_main_keyboard, get_speaker_main_keyboard,
+    get_organizator_main_keyboard,
+    get_favorite_keyboard, get_actual_section_details_keyboard,
+    get_speaker_in_process_keyboard,
+    get_programs_section_details_keyboard,
+    get_actual_section_details_keyboard,
+    go_back,
+)
 from environs import Env
 
 from bot_logic.models import UserTg, Client, Speaker, Question, Event, Session
@@ -19,11 +28,10 @@ ROLE_ORGANIZER_CALLBACK = "role_organizer"
 
 
 def start_command_handler(update: Update, context: CallbackContext):
-    """Обрабатывает команду /start.
-    Регистрирует пользователя, проверяет роль и начинает диалог выбора роли, если необходимо."""
-
+    """Обрабатывает команду /start."""
     user = update.effective_user
-    print(f"Пользователь {user.id} ({user.username or user.first_name}) запустил /start.")
+    print(
+        f"Пользователь {user.id} ({user.first_name}) запустил /start.")
 
     user_tg_instance, created = UserTg.objects.get_or_create(
         tg_id=user.id,
@@ -33,7 +41,7 @@ def start_command_handler(update: Update, context: CallbackContext):
         print(f"Создана новая запись UserTg для {user.id}.")
 
     is_client = Client.objects.filter(user=user_tg_instance).exists()
-    is_speaker = Speaker.objects.filter(user=user_tg_instance).exists()
+    is_speaker = user_tg_instance.is_speaker
     is_organizer = user_tg_instance.is_organizator
 
     determined_role = None
@@ -41,22 +49,26 @@ def start_command_handler(update: Update, context: CallbackContext):
         determined_role = "Организатор"
     elif is_speaker:
         determined_role = "Спикер"
-    elif is_client:  # Гость - это Client
+    elif is_client:
         determined_role = "Гость"
 
     if determined_role:
-        print(f"Роль пользователя {user.id} определена из БД как '{determined_role}'.")
-
+        print(
+            f"Роль пользователя {user.id} определена из БД как '{determined_role}'.")
         show_main_interface_for_role(update, context, role_name=determined_role,
                                      greeting_message=f"С возвращением, {user.first_name}!")
         return ConversationHandler.END
     else:
-        print(f"Роль пользователя {user.id} не определена в БД. Предлагаем выбор.")
+        print(
+            f"Роль пользователя {user.id} не определена в БД. Предлагаем выбор.")
 
         keyboard = [
-            [InlineKeyboardButton("Я Гость", callback_data=ROLE_GUEST_CALLBACK)],
-            [InlineKeyboardButton("Я Спикер", callback_data=ROLE_SPEAKER_CALLBACK)],
-            [InlineKeyboardButton("Я Организатор", callback_data=ROLE_ORGANIZER_CALLBACK)],
+            [InlineKeyboardButton(
+                "Я Гость", callback_data=ROLE_GUEST_CALLBACK)],
+            [InlineKeyboardButton(
+                "Я Спикер", callback_data=ROLE_SPEAKER_CALLBACK)],
+            [InlineKeyboardButton(
+                "Я Организатор", callback_data=ROLE_ORGANIZER_CALLBACK)],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -73,7 +85,6 @@ def start_command_handler(update: Update, context: CallbackContext):
     return CHOOSE_ROLE
 
 
-
 def show_main_interface_for_role(update: Update, context: CallbackContext, role_name: str, greeting_message: str = None):
     """Показывает основной интерфейс (кнопки и сообщение) для указанной роли."""
     chat_id = update.effective_chat.id
@@ -81,10 +92,11 @@ def show_main_interface_for_role(update: Update, context: CallbackContext, role_
 
     text_to_send = greeting_message or f'С возвращением, {user.first_name}! Ваша роль: {role_name}.'
 
-    reply_markup = get_main_keyboard()
+    reply_markup = get_client_main_keyboard()
 
     if update.callback_query:
-        update.callback_query.message.reply_text(text=text_to_send, reply_markup=reply_markup)
+        update.callback_query.message.reply_text(
+            text=text_to_send, reply_markup=reply_markup)
     elif update.message:
         update.message.reply_text(text=text_to_send, reply_markup=reply_markup)
 
@@ -92,7 +104,7 @@ def show_main_interface_for_role(update: Update, context: CallbackContext, role_
     context.user_data['role_defined'] = True
 
 
-def help_command(update:Update, context:CallbackContext):
+def help_command(update: Update, context: CallbackContext):
     """Отправляет справочное сообщение пользователю."""
     user = update.effective_user
 
@@ -140,16 +152,18 @@ def successful_payment_callback(update: Update, context: CallbackContext):
     )
 
 
-def precheckout_callback(update:Update, context: CallbackContext):
+def precheckout_callback(update: Update, context: CallbackContext):
     """Обрабатывает PreCheckoutQuery, отправленный Telegram."""
     query = update.pre_checkout_query
-    print(f"Получен PreCheckoutQuery: id={query.id}, payload={query.invoice_payload}, user_id={query.from_user.id}")
+    print(
+        f"Получен PreCheckoutQuery: id={query.id}, payload={query.invoice_payload}, user_id={query.from_user.id}")
 
     if query.invoice_payload != f'meetup_donation_{query.from_user.id}_{query.invoice_payload.split("_")[-1]}':
         expected_prefix = f'meetup_donation_{query.from_user.id}'
 
         if not query.invoice_payload.startswith(expected_prefix):
-            print(f'ОШИБКА: PreCheckoutQuery с неожиданным payload: {query.invoice_payload}')
+            print(
+                f'ОШИБКА: PreCheckoutQuery с неожиданным payload: {query.invoice_payload}')
             context.bot.answer_pre_checkout_query(
                 pre_checkout_query_id=query.id,
                 ok=False,
@@ -157,11 +171,12 @@ def precheckout_callback(update:Update, context: CallbackContext):
             )
             return
 
-    context.bot.answer_pre_checkout_query(pre_checkout_query_id=query.id, ok=True)
+    context.bot.answer_pre_checkout_query(
+        pre_checkout_query_id=query.id, ok=True)
     print(f"Ответили ok=True на PreCheckoutQuery id={query.id}")
 
 
-def donate(update:Update, context: CallbackContext):
+def donate(update: Update, context: CallbackContext):
     """Отправляет счет для доната."""
     chat_id = update.effective_chat.id
     user = update.effective_user
@@ -225,7 +240,8 @@ def ask_question(update: Update, context: CallbackContext):
     question_text = ' '.join(context.args)
     active_talk_details = get_current_talk_details()
     if active_talk_details:
-        speaker_name = active_talk_details.get('speaker_name', 'Неизвестный Спикер')
+        speaker_name = active_talk_details.get(
+            'speaker_name', 'Неизвестный Спикер')
         talk_title = active_talk_details.get('talk_title', 'Текущий доклад')
 
         response_to_user = (
@@ -233,9 +249,11 @@ def ask_question(update: Update, context: CallbackContext):
             f'Ваш вопрос: «{question_text}» был \"отправлен\".'
         )
 
-        print(f'\n--- Новый вопрос ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")}) ---')
+        print(
+            f'\n--- Новый вопрос ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")}) ---')
         print(f'Для доклада: «{talk_title}» (Спикер: {speaker_name})')
-        print(f'От пользователя: {user.first_name} (ID: {user.id}, Username: {user.username or "N/A"})')
+        print(
+            f'От пользователя: {user.first_name} (ID: {user.id}, Username: {user.username or "N/A"})')
         print(f'Текст вопроса: {question_text}')
         print('-----------------\n')
     else:
@@ -243,41 +261,15 @@ def ask_question(update: Update, context: CallbackContext):
             'В данный момент нет активных докладов, которым можно было бы задать вопрос.\n'
             'Пожалуйста, проверьте расписание (/schedule) и попробуйте позже.'
         )
-        print(f'\n--- Попытка задать вопрос вне активного доклада ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")}) ---')
-        print(f'От пользователя: {user.first_name} (ID: {user.id}, Username: {user.username or "N/A"})')
+        print(
+            f'\n--- Попытка задать вопрос вне активного доклада ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")}) ---')
+        print(
+            f'От пользователя: {user.first_name} (ID: {user.id}, Username: {user.username or "N/A"})')
         print(f'Текст предполагаемого вопроса: {question_text}')
         print('-----------------\n')
     update.message.reply_text(
         response_to_user
     )
-
-
-# def start(update: Update, context: CallbackContext):
-#     """Отправляет приветственное сообщение при команде /start и основную клавиатуру."""
-#     user = update.effective_user
-#     chat_id =update.effective_chat.id
-#     welcome_message = (
-#         f"Привет, {user.first_name}!\n\n"
-#         f"Добро пожаловать на PythonMeetup! Я ваш бот-помощник.\n\n"
-#         f"Здесь вы можете:\n"
-#         f"-Узнать программу мероприятия (команда /schedule или кнопка 'Расписание').\n"
-#         f"-Задать вопрос текущему докладчику (команда /ask <ваш вопрос>).\n"
-#         f"-Поддержать наше мероприятие (команда /donate или кнопка 'Поддержать').\n"
-#         f"-Получить эту справку (команда /help).\n\n"
-#         f"Используйте команды из меню или кнопки ниже для навигации."
-#     )
-#
-#     reply_markup = get_main_keyboard()
-#
-#     context.bot.send_message(
-#         chat_id=chat_id,
-#         text=welcome_message,
-#         reply_markup=reply_markup
-#     )
-#     print(f'Пользователь '
-#           f'{user.id} ({user.username or user.first_name})'
-#           f' запустил бота.'
-#           )
 
 
 def show_schedule(update: Update, context: CallbackContext):
@@ -319,7 +311,8 @@ def handle_guest_choice(update: Update, context: CallbackContext):
     user_tg_instance = UserTg.objects.get(tg_id=user.id)
     client_instance, client_created = Client.objects.get_or_create(
         user=user_tg_instance,
-        defaults={'name': user.first_name}  #Имя пользователя как имя клиента по умолчанию
+        # Имя пользователя как имя клиента по умолчанию
+        defaults={'name': user.first_name}
     )
 
     if client_created:
@@ -327,57 +320,84 @@ def handle_guest_choice(update: Update, context: CallbackContext):
     else:
         print(f"Профиль Client для пользователя {user.id} уже существует.")
 
-    #Редактируем сообщение, убирая инлайн-кнопки
+    # Редактируем сообщение, убирая инлайн-кнопки
     query.edit_message_text(text="Вы выбрали: Я Гость. Добро пожаловать!")
 
-    #Показываем основной интерфейс для гостя
+    # Показываем основной интерфейс для гостя
     greeting = f"Добро пожаловать, {user.first_name}! Вы вошли как Гость."
-    show_main_interface_for_role(update, context, role_name="Гость", greeting_message=greeting)
+    show_main_interface_for_role(
+        update, context, role_name="Гость", greeting_message=greeting)
     return ConversationHandler.END
+
 
 def handle_speaker_choice(update: Update, context: CallbackContext):
     """Обрабатывает выбор роли 'Спикер'."""
-
     query = update.callback_query
     query.answer()
     user = query.from_user
-
     print(f"Пользователь {user.id} выбрал роль 'Спикер'.")
+    user_tg_instance = UserTg.objects.get(tg_id=user.id)
 
-    user_tg_instance = UserTg.objects.get(tg_id=user.id) #Пользователь UserTg должен уже существовать
-
-    if Speaker.objects.filter(user=user_tg_instance).exists():
-        speaker_profile = Speaker.objects.get(user=user_tg_instance)
-        speaker_name = speaker_profile.name if speaker_profile.name else user.first_name
-        print(f"Спикер {user.id} найден в БД.")
-
-        query.edit_message_text(text="Вы подтвердили роль: Спикер. Добро пожаловать!")
-
-        #Показываем интерфейс для спикера
-        greeting = f"Добро пожаловать, {speaker_name}! Вы вошли как Спикер."
-        show_main_interface_for_role(update, context, role_name="Спикер", greeting_message=greeting)
-    else:
-        print(f"Спикер {user.id} НЕ найден в БД.")
+    if user_tg_instance.is_speaker:
         query.edit_message_text(
-            text="К сожалению, вы не найдены в списке спикеров.\n"
-                 "Пожалуйста, обратитесь к организаторам для добавления вас в систему.\n\n"
-                 "Если это ошибка, вы можете попробовать выбрать роль заново, отправив /start."
-        )
+            text="Вы уже подтвержденный спикер. Добро пожаловать!")
+        greeting = f"Добро пожаловать, {user.first_name}! Вы вошли как Спикер."
+        show_main_interface_for_role(
+            update, context, role_name="Спикер", greeting_message=greeting)
+        return ConversationHandler.END
 
+    speaker_profile_exists = Speaker.objects.filter(
+        user=user_tg_instance).exists()
+
+    if speaker_profile_exists:
+        query.edit_message_text(
+            text="Ваша заявка на роль спикера уже отправлена и ожидает подтверждения.")
+        return ConversationHandler.END
+
+    Speaker.objects.create(
+        user=user_tg_instance,
+        name=user.first_name
+    )
+    organizers = UserTg.objects.filter(is_organizator=True)
+    for organizer in organizers:
+        try:
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        "Принять", callback_data=f"approve_speaker_{user.id}"),
+                    InlineKeyboardButton(
+                        "Отказать", callback_data=f"reject_speaker_{user.id}")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            context.bot.send_message(
+                chat_id=organizer.tg_id,
+                text=f"Пользователь {user.first_name} хочет стать спикером. Подтвердить?",
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            print(e)
+
+    query.edit_message_text(
+        text="Ваша заявка на роль спикера отправлена организаторам на подтверждение. Вы получите уведомление, когда она будет рассмотрена.")
     return ConversationHandler.END
 
-def handle_organizer_choice_init(update: Update, context: CallbackContext) :
+
+def handle_organizer_choice_init(update: Update, context: CallbackContext):
     """Инициирует запрос пароля, если пользователь выбрал 'Я Организатор'."""
     query = update.callback_query
     query.answer()
     user = query.from_user
 
-    print(f"Пользователь {user.id} выбрал роль 'Организатор'. Запрашиваем пароль.")
+    print(
+        f"Пользователь {user.id} выбрал роль 'Организатор'. Запрашиваем пароль.")
 
     query.edit_message_text(
         text="Вы выбрали: Я Организатор.\nДля подтверждения вашей роли, пожалуйста, введите пароль организатора:")
 
-    return TYPING_ORGANIZER_PASSWORD  #Переходим в состояние TYPING_ORGANIZER_PASSWORD (число 1)
+    # Переходим в состояние TYPING_ORGANIZER_PASSWORD (число 1)
+    return TYPING_ORGANIZER_PASSWORD
 
 
 def handle_organizer_password(update: Update, context: CallbackContext):
@@ -385,7 +405,8 @@ def handle_organizer_password(update: Update, context: CallbackContext):
     user = update.effective_user
     entered_password = update.message.text
 
-    print(f"Пользователь {user.id} ввел пароль организатора: '{entered_password}'")
+    print(
+        f"Пользователь {user.id} ввел пароль организатора: '{entered_password}'")
 
     env = Env()
     env.read_env()
@@ -402,7 +423,8 @@ def handle_organizer_password(update: Update, context: CallbackContext):
     user_tg_instance = UserTg.objects.get(tg_id=user.id)
 
     if entered_password == expected_password:
-        print(f"Пароль для пользователя {user.id} верный. Подтверждаем роль Организатора.")
+        print(
+            f"Пароль для пользователя {user.id} верный. Подтверждаем роль Организатора.")
         user_tg_instance.is_organizator = True
         user_tg_instance.save()
 
@@ -416,6 +438,7 @@ def handle_organizer_password(update: Update, context: CallbackContext):
         )
         return TYPING_ORGANIZER_PASSWORD
 
+
 def cancel_conversation(update: Update, context: CallbackContext):
     """Отменяет текущий диалог выбора роли."""
 
@@ -425,9 +448,49 @@ def cancel_conversation(update: Update, context: CallbackContext):
     if update.message:
         update.message.reply_text(message_text)
     elif update.callback_query:
-        update.callback_query.answer() #ответ на коллбак
+        update.callback_query.answer()  # ответ на коллбак
         update.callback_query.edit_message_text(text=message_text)
 
     print(f"Пользователь {user.id} отменил диалог.")
 
     return ConversationHandler.END
+
+
+def handle_speaker_approval(update: Update, context: CallbackContext):
+    """Обрабатывает подтверждение спикера организатором."""
+    query = update.callback_query
+    query.answer()
+    organizer = query.from_user
+    data_parts = query.data.split('_')
+    action = data_parts[0]
+    speaker_id = int(data_parts[2])
+    first_name = query.from_user.first_name
+    try:
+        speaker_user = UserTg.objects.get(tg_id=speaker_id)
+        speaker_profile = Speaker.objects.get(user=speaker_user)
+
+        if action == "approve":
+            speaker_user.is_speaker = True
+            speaker_user.save()
+            context.bot.send_message(
+                chat_id=speaker_id,
+                text="Поздравляем! Ваша заявка на роль спикера одобрена. Теперь вы можете пользоваться всеми функциями для спикеров."
+            )
+            query.edit_message_text(
+                text=f"Вы одобрили заявку пользователя {first_name} как спикера."
+            )
+
+        elif action == "reject":
+            speaker_profile.delete()
+
+            context.bot.send_message(
+                chat_id=speaker_id,
+                text="К сожалению, ваша заявка на роль спикера была отклонена организатором."
+            )
+            query.edit_message_text(
+                text=f"Вы отклонили заявку пользователя {first_name} как спикера."
+            )
+    except Exception as e:
+        query.edit_message_text(
+            text="Произошла ошибка при обработке вашего выбора.")
+        print(f"{e}")

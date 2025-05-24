@@ -8,7 +8,7 @@ from .models import (
 
 @admin.register(UserTg)
 class UserTgAdmin(admin.ModelAdmin):
-    list_display = ("tg_id", "nic_tg", "is_organizator")
+    list_display = ("tg_id", "nic_tg", "is_organizator", "is_speaker")
     search_fields = ("tg_id", "nic_tg")
     list_filter = ("is_organizator",)
 

@@ -1,21 +1,25 @@
 import os
 import django
+try:
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'meetup_bot_config.settings')
-django.setup()
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE',
+                          'meetup_bot_config.settings')
+    django.setup()
+except Exception as e:
+    print(e)
 
-from environs import Env, EnvError
-from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler, MessageHandler, Filters,
-                          ConversationHandler, CallbackQueryHandler)
-
+from bot_utils import set_bot_menu_commands
 from handlers import (ask_question, show_schedule,
                       start_command_handler, donate, precheckout_callback, successful_payment_callback,
                       help_command, CHOOSE_ROLE, TYPING_ORGANIZER_PASSWORD,
                       ROLE_GUEST_CALLBACK, ROLE_SPEAKER_CALLBACK, ROLE_ORGANIZER_CALLBACK,
+                      handle_speaker_approval,
                       handle_guest_choice,  handle_speaker_choice, handle_organizer_choice_init,
                       handle_organizer_password, cancel_conversation
                       )
-from bot_utils import set_bot_menu_commands
+from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler, MessageHandler, Filters,
+                          ConversationHandler, CallbackQueryHandler)
+from environs import Env, EnvError
 
 
 def main():
@@ -27,7 +31,8 @@ def main():
         bot_token = env.str('TELEGRAM_TOKEN')
         provider_token = env.str('TELEGRAM_PROVIDER_TOKEN')
     except EnvError as e:
-        print(f'В bot.py не удалось прочитать TELEGRAM_TOKEN или TELEGRAM_PROVIDER_TOKEN. Ошибка {e}')
+        print(
+            f'В bot.py не удалось прочитать TELEGRAM_TOKEN или TELEGRAM_PROVIDER_TOKEN. Ошибка {e}')
         return
 
     updater = Updater(bot_token, use_context=True)
@@ -43,12 +48,16 @@ def main():
         entry_points=[CommandHandler('start', start_command_handler)],
         states={
             CHOOSE_ROLE: [
-                CallbackQueryHandler(handle_guest_choice, pattern=f"^{ROLE_GUEST_CALLBACK}$"),
-                CallbackQueryHandler(handle_speaker_choice, pattern=f"^{ROLE_SPEAKER_CALLBACK}$"),
-                CallbackQueryHandler(handle_organizer_choice_init, pattern=f"^{ROLE_ORGANIZER_CALLBACK}$"),
+                CallbackQueryHandler(handle_guest_choice,
+                                     pattern=f"^{ROLE_GUEST_CALLBACK}$"),
+                CallbackQueryHandler(handle_speaker_choice,
+                                     pattern=f"^{ROLE_SPEAKER_CALLBACK}$"),
+                CallbackQueryHandler(
+                    handle_organizer_choice_init, pattern=f"^{ROLE_ORGANIZER_CALLBACK}$"),
             ],
             TYPING_ORGANIZER_PASSWORD: [
-                MessageHandler(Filters.text & ~Filters.command, handle_organizer_password)
+                MessageHandler(Filters.text & ~Filters.command,
+                               handle_organizer_password)
             ],
         },
         fallbacks=[
@@ -57,6 +66,8 @@ def main():
         allow_reentry=True
     )
 
+    dispatcher.add_handler(CallbackQueryHandler(
+        handle_speaker_approval, pattern=r'^(approve|reject)_speaker_\d+$'))
     dispatcher.add_handler(role_conversation_handler)
     dispatcher.add_handler(CommandHandler('schedule', show_schedule))
     dispatcher.add_handler(CommandHandler('ask', ask_question))
@@ -69,7 +80,8 @@ def main():
                                           )
                            )
 
-    dispatcher.add_handler(MessageHandler(Filters.text('Расписание'), show_schedule))
+    dispatcher.add_handler(MessageHandler(
+        Filters.text('Расписание'), show_schedule))
     dispatcher.add_handler(MessageHandler(Filters.text('Поддержать'), donate))
     updater.start_polling()
     print('Бот запущен и ожидает сообщений...')
