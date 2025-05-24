@@ -5,7 +5,7 @@ from telegram.ext import CallbackContext, ConversationHandler
 
 from bot_utils import (get_current_talk_details, get_full_schedule,
                        load_schedule_from_json)
-from reply_keyboards import get_main_keyboard
+from reply_keyboards import get_main_keyboard, get_organizer_keyboard
 from environs import Env
 
 from bot_logic.models import UserTg, Client, Speaker, Question, Event, Session
@@ -16,6 +16,10 @@ CHOOSE_ROLE, TYPING_ORGANIZER_PASSWORD = range(2)
 ROLE_GUEST_CALLBACK = "role_guest"
 ROLE_SPEAKER_CALLBACK = "role_speaker"
 ROLE_ORGANIZER_CALLBACK = "role_organizer"
+
+MANAGE_SPEAKERS_CHOOSE_EVENT, MANAGE_SPEAKERS_CHOOSE_SPEAKER, MANAGE_SPEAKERS_SESSION_DETAILS = map(str, range(10, 13))
+EVENT_CHOICE_CALLBACK_PREFIX = "event_choice_"
+SPEAKER_CHOICE_CALLBACK_PREFIX = "speaker_choice_"
 
 
 def start_command_handler(update: Update, context: CallbackContext):
@@ -81,12 +85,20 @@ def show_main_interface_for_role(update: Update, context: CallbackContext, role_
 
     text_to_send = greeting_message or f'С возвращением, {user.first_name}! Ваша роль: {role_name}.'
 
-    reply_markup = get_main_keyboard()
+    if role_name == "Организатор":
+        reply_markup = get_organizer_keyboard()
+    else:
+        reply_markup = get_main_keyboard()
 
+    target_message = None
     if update.callback_query:
-        update.callback_query.message.reply_text(text=text_to_send, reply_markup=reply_markup)
+        target_message = update.callback_query.message
+        context.bot.send_message(chat_id=chat_id, text=text_to_send, reply_markup=reply_markup)
     elif update.message:
-        update.message.reply_text(text=text_to_send, reply_markup=reply_markup)
+        target_message = update.message
+        target_message.reply_text(text=text_to_send, reply_markup=reply_markup)
+    else:
+        context.bot.send_message(chat_id=chat_id, text=text_to_send, reply_markup=reply_markup)
 
     context.user_data['role'] = role_name
     context.user_data['role_defined'] = True
@@ -252,34 +264,6 @@ def ask_question(update: Update, context: CallbackContext):
     )
 
 
-# def start(update: Update, context: CallbackContext):
-#     """Отправляет приветственное сообщение при команде /start и основную клавиатуру."""
-#     user = update.effective_user
-#     chat_id =update.effective_chat.id
-#     welcome_message = (
-#         f"Привет, {user.first_name}!\n\n"
-#         f"Добро пожаловать на PythonMeetup! Я ваш бот-помощник.\n\n"
-#         f"Здесь вы можете:\n"
-#         f"-Узнать программу мероприятия (команда /schedule или кнопка 'Расписание').\n"
-#         f"-Задать вопрос текущему докладчику (команда /ask <ваш вопрос>).\n"
-#         f"-Поддержать наше мероприятие (команда /donate или кнопка 'Поддержать').\n"
-#         f"-Получить эту справку (команда /help).\n\n"
-#         f"Используйте команды из меню или кнопки ниже для навигации."
-#     )
-#
-#     reply_markup = get_main_keyboard()
-#
-#     context.bot.send_message(
-#         chat_id=chat_id,
-#         text=welcome_message,
-#         reply_markup=reply_markup
-#     )
-#     print(f'Пользователь '
-#           f'{user.id} ({user.username or user.first_name})'
-#           f' запустил бота.'
-#           )
-
-
 def show_schedule(update: Update, context: CallbackContext):
     """Отправляет пользователю программу мероприятия, загруженную из файла."""
     program_listing = get_full_schedule()
@@ -431,3 +415,223 @@ def cancel_conversation(update: Update, context: CallbackContext):
     print(f"Пользователь {user.id} отменил диалог.")
 
     return ConversationHandler.END
+
+
+def manage_speakers_start(update: Update, context: CallbackContext):
+    """
+    Начинает диалог управления спикерами. Показывает список мероприятий для выбора.
+    Вызывается при нажатии кнопки 'Управление Спикерами'.
+    """
+    user = update.effective_user
+
+    user_tg_instance = UserTg.objects.filter(tg_id=user.id).first()
+    if not (user_tg_instance and user_tg_instance.is_organizator):
+        update.message.reply_text("Эта функция доступна только для организаторов.")
+        return ConversationHandler.END
+
+    print(f"Организатор {user.id} начал управление спикерами.")
+
+    events = Event.objects.all().order_by('start_event')
+
+    if not events:
+        update.message.reply_text("Пока нет запланированных мероприятий, для которых можно управлять спикерами.")
+        return ConversationHandler.END
+
+    keyboard_rows= []
+    for event in events:
+        callback_data = f"{EVENT_CHOICE_CALLBACK_PREFIX}{event.id}"
+        event_date_str = event.start_event.strftime('%d.%m.%Y') if event.start_event else "Дата не указана"
+        button_text = f"{event.name} ({event_date_str})"
+
+        keyboard_rows.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+
+    keyboard_rows.append([InlineKeyboardButton("Отмена", callback_data="manage_speakers_cancel")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard_rows)
+    update.message.reply_text(
+        "Выберите мероприятие, на которое хотите записать спикера, или для которого хотите просмотреть/изменить состав спикеров:",
+        reply_markup=reply_markup
+    )
+
+    return MANAGE_SPEAKERS_CHOOSE_EVENT
+
+
+def handle_event_choice(update:Update, context:CallbackContext):
+    """
+       Обрабатывает выбор мероприятия организатором.
+       Сохраняет ID мероприятия и запрашивает выбор спикера.
+    """
+
+    query = update.callback_query
+    query.answer()
+    user = query.from_user
+
+    try:
+        event_id_str = query.data.replace(EVENT_CHOICE_CALLBACK_PREFIX, "")
+        event_id = int(event_id_str)
+    except (ValueError, TypeError):
+        print(f"ОШИБКА: Не удалось извлечь event_id из callback_data: {query.data}")
+        query.edit_message_text("Произошла ошибка при выборе мероприятия. Попробуйте снова.")
+        return ConversationHandler.END
+
+    context.user_data['selected_event_id'] = event_id
+
+    try:
+        selected_event = Event.objects.get(id=event_id)
+        event_name = selected_event.name
+        print(f"Организатор {user.id} выбрал мероприятие ID: {event_id} ({event_name}).")
+        query.edit_message_text(f"Выбрано мероприятие: {event_name}.\nТеперь выберите спикера из списка:")
+    except Event.DoesNotExist:
+        print(f"ОШИБКА: Мероприятие с ID {event_id} не найдено в БД.")
+        query.edit_message_text("Выбранное мероприятие не найдено. Пожалуйста, начните заново.")
+        return ConversationHandler.END
+
+    speakers = Speaker.objects.all().order_by('name')
+
+    if not speakers.exists():
+        query.message.reply_text( #reply_text, так как edit_message_text уже был вызван
+            "В системе пока нет зарегистрированных спикеров.\n"
+            "Сначала добавьте спикеров, затем вы сможете их записывать на мероприятия."
+        )
+        return ConversationHandler.END
+
+    keyboard = []
+    for speaker_profile in speakers:
+        display_name = speaker_profile.name if speaker_profile.name else \
+            (speaker_profile.user.nic_tg if speaker_profile.user and speaker_profile.user.nic_tg else \
+                 (f"User ID: {speaker_profile.user.tg_id}" if speaker_profile.user else "Имя не указано"))
+
+        callback_data = f"{SPEAKER_CHOICE_CALLBACK_PREFIX}{speaker_profile.id}"
+        button_text = f"{display_name}"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+
+    keyboard.append([InlineKeyboardButton("<< Назад к выбору мероприятия",
+                                              callback_data="manage_speakers_back_to_event_choice")])
+    keyboard.append([InlineKeyboardButton("Отмена", callback_data="manage_speakers_cancel")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    try:
+        query.edit_message_reply_markup(reply_markup=reply_markup)
+    except Exception as e:
+        print(f"Ошибка при попытке изменить клавиатуру: {e}. Отправляем новое сообщение.")
+        query.message.reply_text("Выберите спикера:", reply_markup=reply_markup)
+
+    return MANAGE_SPEAKERS_CHOOSE_SPEAKER
+
+
+def manage_speakers_back_to_event_choice(update: Update, context: CallbackContext):
+    """Возвращает пользователя к выбору мероприятия."""
+
+    query = update.callback_query
+    query.answer()
+
+    if 'selected_event_id' in context.user_data:
+        del context.user_data['selected_event_id']
+
+    events = Event.objects.all().order_by('start_event')
+    if not events.exists():
+        query.edit_message_text("Нет мероприятий для выбора.")
+        return ConversationHandler.END
+
+    keyboard = []
+    for event in events:
+        callback_data = f"{EVENT_CHOICE_CALLBACK_PREFIX}{event.id}"
+        event_date_str = event.start_event.strftime('%d.%m.%Y') if event.start_event else "Дата не указана"
+        button_text = f"{event.name} ({event_date_str})"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+
+    keyboard.append([InlineKeyboardButton("Отмена", callback_data="manage_speakers_cancel")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    query.edit_message_text(
+        "Выберите мероприятие снова:",
+        reply_markup=reply_markup
+    )
+    return MANAGE_SPEAKERS_CHOOSE_EVENT
+
+
+def manage_speakers_cancel_conversation(update: Update, context: CallbackContext):
+    """Отменяет диалог управления спикерами."""
+    query = update.callback_query
+    query.answer()
+    user = query.from_user
+
+    message_text = "Управление спикерами отменено."
+    query.edit_message_text(text=message_text)
+    print(f"Организатор {user.id} отменил диалог управления спикерами.")
+
+    # Очищаем user_data, если там что-то было сохранено для этого диалога
+    if 'selected_event_id' in context.user_data:
+        del context.user_data['selected_event_id']
+    if 'selected_speaker_id' in context.user_data:  # на будущее
+        del context.user_data['selected_speaker_id']
+
+    return ConversationHandler.END
+
+
+def handle_speaker_selection(update: Update, context: CallbackContext):
+    """
+        Обрабатывает выбор спикера организатором.
+        Сохраняет ID спикера и запрашивает детали сессии/доклада.
+    """
+    query = update.callback_query
+    query.answer()
+    user = query.from_user # сейчас орг
+
+    try:
+        speaker_id_str = query.data.replace(SPEAKER_CHOICE_CALLBACK_PREFIX, "")
+        speaker_id = int(speaker_id_str)
+    except (ValueError, TypeError):
+        print(f"ОШИБКА: Не удалось извлечь speaker_id из callback_data: {query.data}")
+        query.edit_message_text("Произошла ошибка при выборе спикера. Попробуйте снова.")
+        return ConversationHandler.END
+
+    context.user_data['selected_speaker_id'] = speaker_id
+
+    try:
+        selected_speaker = Speaker.objects.get(id=speaker_id)
+
+        speaker_display_name = selected_speaker.name if selected_speaker.name else \
+            (selected_speaker.user.nic_tg if selected_speaker.user and selected_speaker.user.nic_tg else \
+                 (f"User ID: {selected_speaker.user.tg_id}" if selected_speaker.user else "Имя не указано"))
+
+        # Получаем ID ранее выбранного мероприятия из user_data
+        selected_event_id = context.user_data.get('selected_event_id')
+        if not selected_event_id:
+            print(f"ОШИБКА: selected_event_id не найден в user_data для организатора {user.id}")
+            query.edit_message_text("Произошла ошибка: не найдено выбранное мероприятие. Начните заново.")
+            return ConversationHandler.END
+
+        selected_event = Event.objects.get(id=selected_event_id)  # Предполагаем, что мероприятие существует
+
+        print(
+            f"Организатор {user.id} выбрал спикера ID: {speaker_id} ({speaker_display_name}) для мероприятия '{selected_event.name}'.")
+
+        message_text = (
+            f"Выбран спикер: {speaker_display_name}\n"
+            f"Для мероприятия: {selected_event.name}\n\n"
+            "Теперь, пожалуйста, введите детали для его выступления.\n"
+            "Отправьте ОДНО сообщение, где каждая деталь на новой строке, в следующем формате:\n\n"
+            "Тема доклада: [Полное название темы]\n"
+            "Начало (ДД.ММ.ГГГГ ЧЧ:ММ): [Дата и время начала]\n"
+            "Окончание (ДД.ММ.ГГГГ ЧЧ:ММ): [Дата и время окончания]\n\n"
+            "Пример:\n"
+            "Тема доклада: Введение в асинхронный Python\n"
+            "Начало (ДД.ММ.ГГГГ ЧЧ:ММ): 25.12.2024 10:00\n"
+            "Окончание (ДД.ММ.ГГГГ ЧЧ:ММ): 25.12.2024 10:45"
+        )
+        query.edit_message_text(text=message_text)
+
+    except Speaker.DoesNotExist:
+        print(f"ОШИБКА: Спикер с ID {speaker_id} не найден в БД.")
+        query.edit_message_text("Выбранный спикер не найден. Пожалуйста, начните заново.")
+        return ConversationHandler.END
+    except Event.DoesNotExist:
+        print(
+            f"ОШИБКА: Мероприятие с ID {context.user_data.get('selected_event_id')} не найдено в БД при выборе спикера.")
+        query.edit_message_text("Произошла ошибка с выбранным мероприятием. Начните заново.")
+        return ConversationHandler.END
+
+    return MANAGE_SPEAKERS_SESSION_DETAILS
+
