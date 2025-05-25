@@ -33,8 +33,7 @@ class PersonBase(models.Model):
     name = models.CharField("Имя", max_length=50, null=True, blank=True)
     contact_phone = PhoneNumberField(
         "Мобильный номер", null=True, blank=True, unique=True, db_index=True)
-    stack = models.CharField("Cтэк", max_length=15,
-                             choices=STACK_CHOICES, null=True, blank=True)
+    biography = models.TextField("О себе", null=True, blank=True)
 
     class Meta:
         abstract = True
@@ -43,6 +42,7 @@ class PersonBase(models.Model):
 class Client(PersonBase):
     favorite_stack = models.CharField(
         "Любимый стэк", max_length=15, choices=STACK_CHOICES, null=True, blank=True)
+    is_registered = models.BooleanField("Зарегистрирован", default=False)
 
     def __str__(self):
         return f"{self.name}"
@@ -53,7 +53,6 @@ class Client(PersonBase):
 
 
 class Speaker(PersonBase):
-    biography = models.TextField("О спикере", null=True, blank=True)
 
     def __str__(self):
         return f"{self.name}"
@@ -70,7 +69,7 @@ class Event(models.Model):
         "Место проведения", max_length=100, null=True)
     start_event = models.DateTimeField("Время начала", null=True)
     finish_event = models.DateTimeField("Время завершения", null=True)
-    date = models.DateField("Дата", null=True)
+    # date = models.DateField("Дата", null=True)
 
     def __str__(self):
         return f"{self.name}"
@@ -80,13 +79,26 @@ class Event(models.Model):
         verbose_name_plural = "мероприятия"
 
 
-class Session(models.Model):
+class EventRegistration(models.Model):
+    client = models.ForeignKey(
+        Client, on_delete=models.CASCADE, related_name='registrations')
     event = models.ForeignKey(
-        Event, on_delete=models.CASCADE, related_name="sessions", verbose_name="мероприятие")
-    title = models.CharField("Название", max_length=100, null=True, blank=True)
-    start_session = models.DateTimeField("Время начала", null=True)
-    finish_session = models.DateTimeField("Время завершения", null=True)
-    address = models.CharField("Место проведения", max_length=150, null=True)
+        Event, on_delete=models.CASCADE, related_name='registrations')
+    registration_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('client', 'event')
+        verbose_name = 'регистрация на мероприятие'
+        verbose_name_plural = 'регистрации на мероприятия'
+
+
+class Session(models.Model):
+    title = models.CharField(
+        "Название", max_length=100, null=True, blank=True)
+    event = models.ForeignKey(
+        Event, on_delete=models.CASCADE, related_name="sessions",
+        verbose_name="мероприятие", null=True
+    )
 
     def __str__(self):
         return f"{self.title}"
@@ -98,15 +110,17 @@ class Session(models.Model):
 
 class SpeakerSession(models.Model):
     session = models.ForeignKey(
-        Session, on_delete=models.CASCADE, related_name="speaker_sessions", verbose_name="доклад")
+        Session, on_delete=models.CASCADE,
+        related_name="speaker_sessions", verbose_name="доклад")
     speaker = models.ForeignKey(
-        Speaker, on_delete=models.CASCADE, related_name="speaker_sessions", verbose_name="спикер")
-    topic = models.CharField("Тема выступления", max_length=150, null=True)
+        Speaker, on_delete=models.CASCADE,
+        related_name="speaker_sessions", verbose_name="спикер")
     start_session = models.DateTimeField("Начало выступления", null=True)
     finish_session = models.DateTimeField("Завершение", null=True)
+    is_finish = models.BooleanField("Закончил ли выступление", default=False)
 
     def __str__(self):
-        return f"{self.topic}"
+        return f"{self.session.title}"
 
     class Meta:
         verbose_name = "выступление спикера"
@@ -115,11 +129,16 @@ class SpeakerSession(models.Model):
 
 class Question(models.Model):
     speaker = models.ForeignKey(
-        Speaker, on_delete=models.CASCADE, related_name="questions", verbose_name="спикер")
+        Speaker, on_delete=models.CASCADE,
+        related_name="questions", verbose_name="спикер")
     client = models.ForeignKey(
-        Client, on_delete=models.CASCADE, related_name="questions", verbose_name="клиент")
+        Client, on_delete=models.CASCADE,
+        related_name="questions", verbose_name="клиент")
     text = models.TextField("Вопрос", null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    event = models.ForeignKey(
+        Event, on_delete=models.CASCADE,
+        related_name="questions", null=True, blank=True)
 
     def __str__(self):
         return f"Вопрос для {self.speaker.name} от  {self.client.name}"

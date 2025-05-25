@@ -5,10 +5,23 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, 
 # ======================================================================
 
 
+def get_client_initial_keyboard():
+    keyboard_layout = [
+        [KeyboardButton('Программы')]
+    ]
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard_layout,
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+
+
 def get_client_main_keyboard():
     keyboard_layout = [
         [KeyboardButton('Программы'),
-         KeyboardButton('Актуалочка')]
+         KeyboardButton('Актуалочка'),
+         KeyboardButton("Поддержать")
+         ]
     ]
 
     return ReplyKeyboardMarkup(
@@ -20,18 +33,18 @@ def get_client_main_keyboard():
 
 # ===========КЛАВЫ ЕСЛИ КЛИЕНТ В НАЧАЛЕ ТЫКНУЛ НА ---ПРОГРАММЫ--- ===========
 
+
 def get_programs_section_details_keyboard():
     keyboard_layout = [
-        [KeyboardButton('Подробнее'),
-         KeyboardButton('Стать спикером'),
-         KeyboardButton('Назад')]
+        [
+            InlineKeyboardButton('Подробнее', callback_data='program_details'),
+            InlineKeyboardButton(
+                'Стать спикером', callback_data='become_speaker'),
+            InlineKeyboardButton('Назад', callback_data='go_back')
+        ]
     ]
 
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard_layout,
-        resize_keyboard=True,
-        one_time_keyboard=False
-    )
+    return InlineKeyboardMarkup(keyboard_layout)
 
 
 def get_favorite_keyboard():
@@ -51,21 +64,22 @@ def get_favorite_keyboard():
 # ===========КЛАВЫ ЕСЛИ КЛИЕНТ В НАЧАЛЕ ТЫКНУЛ НА ---АКТУАЛОЧКА--- ===========
 
 def get_actual_section_details_keyboard():
-    keyboard_layout = [
-        [KeyboardButton('Задать вопрос'),
-         KeyboardButton('Поддержать'),
-         KeyboardButton('Хронология'),
-         KeyboardButton('Найти собеседника')
-         ]
+    keyboard = [
+        [InlineKeyboardButton("Задать вопрос", callback_data="ask_question")],
+        [InlineKeyboardButton("Хронология", callback_data="timeline")],
+        [InlineKeyboardButton("Найти собеседника",
+                              callback_data="find_partner")]
     ]
-
-    return ReplyKeyboardMarkup(
-        keyboard=keyboard_layout,
-        resize_keyboard=True,
-        one_time_keyboard=False
-    )
+    return InlineKeyboardMarkup(keyboard)
 
 
+def get_programs_section_details_second_keyboard():
+    keyboard = [
+        [InlineKeyboardButton(
+            "Записаться", callback_data="register_for_event")],
+        [InlineKeyboardButton("Назад", callback_data="back_to_main")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 # ======================================================================
 # ===============================СПИКЕР===================================
 # ======================================================================
