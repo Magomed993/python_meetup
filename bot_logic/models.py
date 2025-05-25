@@ -124,3 +124,42 @@ class Question(models.Model):
     class Meta:
         verbose_name = "вопрос"
         verbose_name_plural = "вопросы"
+
+
+class ProspectiveSpeaker(models.Model):
+    user_tg = models.ForeignKey(
+        UserTg,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='Telegram пользователь (если известен)',
+        related_name='prospective_speaker_profile'
+    )
+    name = models.CharField(
+        'Имя',
+        max_length=150,
+        help_text='Имя или ФИО потенциального спикера'
+    )
+    contact_info = models.CharField(
+        'Контактная информация',
+        max_length=255,
+        help_text='Email, ссылка на профиль, или другой способ связи',
+        null=True, blank=True
+    )
+    notes = models.TextField(
+        'Заметки / Темы выступлений',
+        help_text='Любая дополнительная информация, предложенные темы, комментарии организатора',
+        null=True, blank=True
+    )
+    date_added = models.DateTimeField(
+        "Дата добавления в резерв",
+        auto_now_add=True
+    )
+
+    def __str__(self):
+        return f"{self.name} (Резерв, добавлен: {self.date_added.strftime('%d.%m.%Y')})"
+
+    class Meta:
+        verbose_name = 'потенциальный спикер'
+        verbose_name_plural = 'потенциальные спикеры'
+        ordering = ['-date_added']
