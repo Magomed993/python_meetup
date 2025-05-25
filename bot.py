@@ -1,26 +1,32 @@
 import os
+
 import django
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'meetup_bot_config.settings')
 django.setup()
 
 from environs import Env, EnvError
-from telegram.ext import (CommandHandler, Updater, PreCheckoutQueryHandler, MessageHandler, Filters,
-                          ConversationHandler, CallbackQueryHandler)
+from telegram.ext import (CallbackQueryHandler, CommandHandler,
+                          ConversationHandler, Filters, MessageHandler,
+                          PreCheckoutQueryHandler, Updater)
 
-from handlers import (ask_question, show_schedule, handle_event_choice, manage_speakers_back_to_event_choice,
-                      manage_speakers_cancel_conversation,
-                      start_command_handler, donate, precheckout_callback, successful_payment_callback,
-                      help_command, CHOOSE_ROLE, TYPING_ORGANIZER_PASSWORD,
-                      ROLE_GUEST_CALLBACK, ROLE_SPEAKER_CALLBACK, ROLE_ORGANIZER_CALLBACK,
-                      handle_guest_choice, handle_speaker_choice, handle_organizer_choice_init,
-                      handle_organizer_password, cancel_conversation,
-                      manage_speakers_start,
-                      MANAGE_SPEAKERS_CHOOSE_EVENT, MANAGE_SPEAKERS_CHOOSE_SPEAKER, MANAGE_SPEAKERS_SESSION_DETAILS,
-                      EVENT_CHOICE_CALLBACK_PREFIX, EVENT_CHOICE_CALLBACK_PREFIX, SPEAKER_CHOICE_CALLBACK_PREFIX,
-                      handle_speaker_selection,
-                      )
 from bot_utils import set_bot_menu_commands
+from handlers import (CHOOSE_ROLE, EVENT_CHOICE_CALLBACK_PREFIX,
+                      MANAGE_SPEAKERS_CHOOSE_EVENT,
+                      MANAGE_SPEAKERS_CHOOSE_SPEAKER,
+                      MANAGE_SPEAKERS_SESSION_DETAILS, ROLE_GUEST_CALLBACK,
+                      ROLE_ORGANIZER_CALLBACK, ROLE_SPEAKER_CALLBACK,
+                      SPEAKER_CHOICE_CALLBACK_PREFIX,
+                      TYPING_ORGANIZER_PASSWORD, ask_question,
+                      cancel_conversation, donate, handle_event_choice,
+                      handle_guest_choice, handle_organizer_choice_init,
+                      handle_organizer_password, handle_speaker_choice,
+                      handle_speaker_selection, help_command,
+                      manage_speakers_back_to_event_choice,
+                      manage_speakers_cancel_conversation,
+                      manage_speakers_start, precheckout_callback,
+                      show_schedule, start_command_handler,
+                      successful_payment_callback,  handle_session_details_input)
 
 
 def main():
@@ -74,7 +80,9 @@ def main():
                                             CallbackQueryHandler(manage_speakers_back_to_event_choice,
                                                                   pattern='^manage_speakers_back_to_event_choice$'),
                                              ],
-            MANAGE_SPEAKERS_SESSION_DETAILS: [ ],
+            MANAGE_SPEAKERS_SESSION_DETAILS: [
+                MessageHandler(Filters.text & ~Filters.command, handle_session_details_input),
+            ],
         },
         fallbacks=[
             CallbackQueryHandler(manage_speakers_cancel_conversation, pattern='^manage_speakers_cancel$'),

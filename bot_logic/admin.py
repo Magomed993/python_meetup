@@ -1,9 +1,7 @@
 from django.contrib import admin
-from .models import (
-    UserTg, Client, Speaker,
-    Event, Session, SpeakerSession,
-    Question
-)
+
+from .models import (Client, Event, Question, Session, Speaker, SpeakerSession,
+                     UserTg)
 
 
 @admin.register(UserTg)

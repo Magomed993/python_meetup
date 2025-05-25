@@ -1,15 +1,15 @@
 from datetime import datetime
 
-from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
+from environs import Env
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice,
+                      Update)
 from telegram.ext import CallbackContext, ConversationHandler
 
+from bot_logic.models import (Client, Event, Question, Session, Speaker,
+                              SpeakerSession, UserTg)
 from bot_utils import (get_current_talk_details, get_full_schedule,
                        load_schedule_from_json)
 from reply_keyboards import get_main_keyboard, get_organizer_keyboard
-from environs import Env
-
-from bot_logic.models import UserTg, Client, Speaker, Question, Event, Session
-
 
 CHOOSE_ROLE, TYPING_ORGANIZER_PASSWORD = range(2)
 
@@ -609,17 +609,17 @@ def handle_speaker_selection(update: Update, context: CallbackContext):
             f"Организатор {user.id} выбрал спикера ID: {speaker_id} ({speaker_display_name}) для мероприятия '{selected_event.name}'.")
 
         message_text = (
-            f"Выбран спикер: {speaker_display_name}\n"
-            f"Для мероприятия: {selected_event.name}\n\n"
-            "Теперь, пожалуйста, введите детали для его выступления.\n"
-            "Отправьте ОДНО сообщение, где каждая деталь на новой строке, в следующем формате:\n\n"
-            "Тема доклада: [Полное название темы]\n"
-            "Начало (ДД.ММ.ГГГГ ЧЧ:ММ): [Дата и время начала]\n"
-            "Окончание (ДД.ММ.ГГГГ ЧЧ:ММ): [Дата и время окончания]\n\n"
-            "Пример:\n"
-            "Тема доклада: Введение в асинхронный Python\n"
-            "Начало (ДД.ММ.ГГГГ ЧЧ:ММ): 25.12.2024 10:00\n"
-            "Окончание (ДД.ММ.ГГГГ ЧЧ:ММ): 25.12.2024 10:45"
+            f'Выбран спикер: {speaker_display_name}\n'
+            f'Для мероприятия: {selected_event.name}\n\n'
+            'Теперь, пожалуйста, введите детали для его выступления.\n'
+            'Отправьте ОДНО сообщение, где каждая деталь на новой строке, в следующем формате:\n\n'
+            'Тема доклада: [Полное название темы]\n'
+            'Начало: [ДД.ММ.ГГГГ ЧЧ:ММ]\n'
+            'Окончание: [ДД.ММ.ГГГГ ЧЧ:ММ]\n\n'
+            'Пример:\n'
+            'Тема доклада: Введение в асинхронный Python\n'
+            'Начало: 25.12.2024 10:00\n'
+            'Окончание: 25.12.2024 10:45'
         )
         query.edit_message_text(text=message_text)
 
@@ -634,4 +634,144 @@ def handle_speaker_selection(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
     return MANAGE_SPEAKERS_SESSION_DETAILS
+
+
+def handle_session_details_input(update: Update, context: CallbackContext):
+    """
+        Обрабатывает введенные организатором детали сессии (тема, начало, окончание).
+        Создает записи Session и SpeakerSession в БД.
+    """
+
+    user = update.effective_user
+    text_input = update.message.text
+
+    print(f"Организатор {user.id} ввел детали сессии: \n{text_input}")
+
+    try:
+        lines = text_input.strip().split('\n')
+        details = {}
+        for line in lines:
+            if ':' in line:
+                key, value = line.split(':', 1)
+                processed_key = key.strip().lower()
+                details[processed_key] = value.strip()
+                details[key.strip().lower()] = value.strip()
+            else:
+                pass
+
+        # Ожидаемые ключи
+        topic_key = 'тема доклада'
+        start_key = 'начало'
+        end_key = 'окончание'
+
+        session_topic = details.get(topic_key)
+        start_time_str = details.get(start_key)
+        end_time_str = details.get(end_key)
+
+        if not (session_topic and start_time_str and end_time_str):
+            missing_parts = []
+            if not session_topic: missing_parts.append("'Тема доклада'")
+            if not start_time_str: missing_parts.append("'Начало'")
+            if not end_time_str: missing_parts.append("'Окончание'")
+
+            error_detail = f"Не найдены следующие обязательные части: {', '.join(missing_parts)}." \
+                if missing_parts else "Формат ввода неверный."
+
+            raise ValueError(f"{error_detail}\n"
+                             "Пожалуйста, используйте формат:\n"
+                             "Тема доклада: [Название]\n"
+                             "Начало: [ДД.ММ.ГГГГ ЧЧ:ММ]\n"  
+                             "Окончание: [ДД.ММ.ГГГГ ЧЧ:ММ]")
+
+        datetime_format = "%d.%m.%Y %H:%M"
+        start_datetime = datetime.strptime(start_time_str, datetime_format)
+        end_datetime = datetime.strptime(end_time_str, datetime_format)
+
+        if start_datetime >= end_datetime:
+            raise ValueError("Время начала должно быть раньше времени окончания.")
+
+    except ValueError as e:
+        error_message = f"Ошибка в данных: {e}\n\nПожалуйста, попробуйте ввести детали снова, соблюдая формат."
+        update.message.reply_text(error_message)
+        return MANAGE_SPEAKERS_SESSION_DETAILS
+    except Exception as e:
+        print(f"Непредвиденная ошибка парсинга деталей сессии: {e}")
+        update.message.reply_text(
+            "Произошла ошибка при обработке введенных данных. "
+            "Пожалуйста, проверьте формат и попробуйте снова.\n\n"
+            "Тема доклада: [Название]\n"
+            "Начало (ДД.ММ.ГГГГ ЧЧ:ММ): [Дата и время]\n"
+            "Окончание (ДД.ММ.ГГГГ ЧЧ:ММ): [Дата и время]"
+        )
+        return MANAGE_SPEAKERS_SESSION_DETAILS
+
+    selected_event_id = context.user_data.get('selected_event_id')
+    selected_speaker_id = context.user_data.get('selected_speaker_id')
+
+    if not selected_event_id or not selected_speaker_id:
+        print("ОШИБКА: selected_event_id или selected_speaker_id не найдены в user_data.")
+        update.message.reply_text(
+            "Произошла внутренняя ошибка (потерян контекст). Пожалуйста, начните процесс записи спикера заново с помощью команды /start и выбора роли организатора.")
+
+        context.user_data.pop('selected_event_id', None)
+        context.user_data.pop('selected_speaker_id', None)
+        return ConversationHandler.END
+
+    try:
+        event_instance = Event.objects.get(id=selected_event_id)
+        speaker_instance = Speaker.objects.get(id=selected_speaker_id)
+
+        new_session = Session.objects.create(
+            event=event_instance,
+            title=session_topic,
+            start_session=start_datetime,
+            finish_session=end_datetime
+        )
+        print(f"Создана сессия: ID={new_session.id}, Тема='{new_session.title}'")
+
+
+
+        speaker_session_instance = SpeakerSession.objects.create(
+            session=new_session,
+            speaker=speaker_instance,
+            topic=session_topic,
+            start_session=start_datetime,
+            finish_session=end_datetime
+        )
+        print(
+            f"Создана SpeakerSession: ID={speaker_session_instance.id} для спикера {speaker_instance.id} и сессии {new_session.id}")
+
+        speaker_display_name = speaker_instance.name or \
+                               (speaker_instance.user.nic_tg if speaker_instance.user else None) or \
+                               f"ID {speaker_instance.user.tg_id}"
+
+        success_message = (
+            f"Успешно! Спикер '{speaker_display_name}' записан на мероприятие '{event_instance.name}'.\n"
+            f"Доклад: '{session_topic}'\n"
+            f"Время: с {start_datetime.strftime(datetime_format)} по {end_datetime.strftime(datetime_format)}"
+        )
+        update.message.reply_text(success_message)
+
+
+        context.user_data.pop('selected_event_id', None)
+        context.user_data.pop('selected_speaker_id', None)
+
+
+        show_main_interface_for_role(update, context, role_name="Организатор",
+                                     greeting_message="Вы вернулись в меню организатора.")
+        return ConversationHandler.END
+
+    except Event.DoesNotExist:
+        update.message.reply_text("Ошибка: выбранное ранее мероприятие не найдено. Начните заново.")
+    except Speaker.DoesNotExist:
+        update.message.reply_text("Ошибка: выбранный ранее спикер не найден. Начните заново.")
+    except Exception as e:
+        print(f"Ошибка при создании записей в БД: {e}")
+        update.message.reply_text(
+            "Произошла ошибка при сохранении данных. Попробуйте снова или обратитесь к администратору.")
+
+
+    context.user_data.pop('selected_event_id', None)
+    context.user_data.pop('selected_speaker_id', None)
+    return ConversationHandler.END
 

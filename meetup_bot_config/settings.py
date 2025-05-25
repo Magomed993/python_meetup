@@ -1,5 +1,6 @@
-from environs import Env, EnvError
 from pathlib import Path
+
+from environs import Env, EnvError
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
