@@ -13,6 +13,7 @@ from telegram.ext import (CallbackQueryHandler, CommandHandler,
 from bot_utils import set_bot_menu_commands
 from handlers import (CHOOSE_ROLE, EVENT_CHOICE_CALLBACK_PREFIX,
                       MANAGE_SPEAKERS_CHOOSE_EVENT,
+                      PS_TYPING_NAME, PS_TYPING_CONTACT, PS_TYPING_NOTES,
                       MANAGE_SPEAKERS_CHOOSE_SPEAKER,
                       MANAGE_SPEAKERS_SESSION_DETAILS, ROLE_GUEST_CALLBACK,
                       ROLE_ORGANIZER_CALLBACK, ROLE_SPEAKER_CALLBACK,
@@ -26,7 +27,12 @@ from handlers import (CHOOSE_ROLE, EVENT_CHOICE_CALLBACK_PREFIX,
                       manage_speakers_cancel_conversation,
                       manage_speakers_start, precheckout_callback,
                       show_schedule, start_command_handler,
-                      successful_payment_callback,  handle_session_details_input)
+                      successful_payment_callback, handle_session_details_input,
+                      ps_cancel_add_speaker, add_prospective_speaker_start,
+                      ps_handle_name,
+                      ps_handle_contact,
+                      ps_handle_notes_and_save, ps_skip_notes_and_save,
+                      )
 
 
 def main():
@@ -93,8 +99,32 @@ def main():
         allow_reentry=True
     )
 
+    add_prospective_speaker_conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(Filters.regex(r'^\s*Добавить в резерв\s*$'), add_prospective_speaker_start)
+        ],
+        states={
+            PS_TYPING_NAME: [
+                MessageHandler(Filters.text & ~Filters.command, ps_handle_name)
+            ],
+            PS_TYPING_CONTACT: [
+                MessageHandler(Filters.text & ~Filters.command, ps_handle_contact)
+            ],
+            PS_TYPING_NOTES: [
+                CommandHandler('skip_notes', ps_skip_notes_and_save),
+                MessageHandler(Filters.text & ~Filters.command, ps_handle_notes_and_save),
+            ],
+        },
+        fallbacks=[
+            CommandHandler('cancel_add_speaker', ps_cancel_add_speaker),
+
+        ],
+        allow_reentry=True
+    )
+
     dispatcher.add_handler(role_conversation_handler)
     dispatcher.add_handler(manage_speakers_conv_handler)
+    dispatcher.add_handler(add_prospective_speaker_conv_handler)
 
     dispatcher.add_handler(CommandHandler('schedule', show_schedule))
     dispatcher.add_handler(CommandHandler('ask', ask_question))

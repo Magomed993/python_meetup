@@ -6,7 +6,7 @@ from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice,
 from telegram.ext import CallbackContext, ConversationHandler
 
 from bot_logic.models import (Client, Event, Question, Session, Speaker,
-                              SpeakerSession, UserTg)
+                              SpeakerSession, UserTg, ProspectiveSpeaker)
 from bot_utils import (get_current_talk_details, get_full_schedule,
                        load_schedule_from_json)
 from reply_keyboards import get_main_keyboard, get_organizer_keyboard
@@ -21,6 +21,7 @@ MANAGE_SPEAKERS_CHOOSE_EVENT, MANAGE_SPEAKERS_CHOOSE_SPEAKER, MANAGE_SPEAKERS_SE
 EVENT_CHOICE_CALLBACK_PREFIX = "event_choice_"
 SPEAKER_CHOICE_CALLBACK_PREFIX = "speaker_choice_"
 
+PS_TYPING_NAME, PS_TYPING_CONTACT, PS_TYPING_NOTES = map(str, range(20, 23))
 
 def start_command_handler(update: Update, context: CallbackContext):
     """Обрабатывает команду /start.
@@ -774,4 +775,187 @@ def handle_session_details_input(update: Update, context: CallbackContext):
     context.user_data.pop('selected_event_id', None)
     context.user_data.pop('selected_speaker_id', None)
     return ConversationHandler.END
+
+
+def add_prospective_speaker_start(update: Update, context: CallbackContext):
+    '''Начинает диалог добавления нового потенциального спикера. Запрашивает имя'''
+
+    user = update.effective_user
+
+    user_tg_instance = UserTg.objects.filter(tg_id=user.id).first()
+    if not (user_tg_instance and user_tg_instance.is_organizator):
+        update.message.reply_text("Эта функция доступна только для организаторов.")
+        return ConversationHandler.END
+
+    update.message.reply_text(
+        "Вы собираетесь добавить нового потенциального спикера в резерв.\n"
+        "Пожалуйста, введите Имя (или ФИО) спикера.\n\n"
+        "Чтобы отменить, введите /cancel_add_speaker"
+    )
+    return PS_TYPING_NAME
+
+
+def ps_handle_contact(update: Update, context: CallbackContext):
+    """Сохраняет контакты и запрашивает заметки/темы."""
+
+    user = update.effective_user
+    entered_contact = update.message.text.strip()
+
+    if not entered_contact:
+        update.message.reply_text(
+            'Контактная информация не может быть пустой. Введите контакты или /cancel_add_speaker.')
+        return PS_TYPING_CONTACT
+
+    context.user_data['prospective_speaker_contact'] = entered_contact
+    speaker_name = context.user_data.get('prospective_speaker_name', 'спикера')
+    print(f'Организатор {user.id} ввел контакты для {speaker_name}: {entered_contact}')
+
+    update.message.reply_text(
+        f'Контактная информация сохранена: {entered_contact}.\n'
+        'Теперь, пожалуйста, введите любые заметки о спикере или темы, которые он мог бы осветить (можно оставить пустым, нажав /skip_notes).\n\n'
+        'Чтобы отменить весь процесс, введите /cancel_add_speaker'
+    )
+    return PS_TYPING_NOTES
+
+
+def ps_handle_notes_and_save(update: Update, context: CallbackContext):
+    """Сохраняет заметки (если есть) и создает запись ProspectiveSpeaker в БД."""
+
+    user = update.effective_user
+    entered_notes = update.message.text.strip()
+
+    if not entered_notes:
+        update.message.reply_text(
+            "Заметки не могут быть пустым сообщением. Введите текст или /skip_notes для пропуска, или /cancel_add_speaker для отмены.")
+        return PS_TYPING_NOTES
+
+    print(f"Организатор {user.id} ввел заметки: {entered_notes}")
+    context.user_data['prospective_speaker_notes'] = entered_notes
+
+    name = context.user_data.get('prospective_speaker_name')
+    contact = context.user_data.get('prospective_speaker_contact')
+    notes = context.user_data.get('prospective_speaker_notes')
+
+    if not name or not contact:
+        print("ОШИБКА: Потеряны имя или контакты в user_data при добавлении потенциального спикера.")
+        update.message.reply_text("Произошла внутренняя ошибка. Пожалуйста, начните заново.")
+        # Очистка user_data
+        context.user_data.pop('prospective_speaker_name', None)
+        context.user_data.pop('prospective_speaker_contact', None)
+        context.user_data.pop('prospective_speaker_notes', None)
+        return ConversationHandler.END
+
+    try:
+        new_prospective_speaker = ProspectiveSpeaker.objects.create(
+            name=name,
+            contact_info=contact,
+            notes=notes
+        )
+        print(f"Создана запись ProspectiveSpeaker: ID={new_prospective_speaker.id}, Имя='{name}'")
+        update.message.reply_text(
+            f"Успешно! Потенциальный спикер '{name}' добавлен в резерв.\n"
+            f"Контакты: {contact}\n"
+            f"Заметки: {notes if notes else 'Нет'}"
+        )
+    except Exception as e:
+        print(f"ОШИБКА при создании ProspectiveSpeaker: {e}")
+        update.message.reply_text("Произошла ошибка при сохранении данных. Попробуйте снова.")
+
+        context.user_data.pop('prospective_speaker_name', None)
+        context.user_data.pop('prospective_speaker_contact', None)
+        context.user_data.pop('prospective_speaker_notes', None)
+        return ConversationHandler.END
+
+    context.user_data.pop('prospective_speaker_name', None)
+    context.user_data.pop('prospective_speaker_contact', None)
+    context.user_data.pop('prospective_speaker_notes', None)
+
+    show_main_interface_for_role(update, context, role_name="Организатор",
+                                 greeting_message="Вы вернулись в меню организатора.")
+    return ConversationHandler.END
+
+
+def ps_cancel_add_speaker(update: Update, context: CallbackContext) -> int:
+    """Отменяет диалог добавления потенциального спикера."""
+    user = update.effective_user
+    print(f'Организатор {user.id} отменил добавление потенциального спикера.')
+    update.message.reply_text('Добавление нового потенциального спикера отменено.')
+
+
+    context.user_data.pop('prospective_speaker_name', None)
+    context.user_data.pop('prospective_speaker_contact', None)
+    context.user_data.pop('prospective_speaker_notes', None)
+
+    show_main_interface_for_role(update, context, role_name='Организатор',
+                                 greeting_message='Вы вернулись в меню организатора.')
+    return ConversationHandler.END
+
+def ps_handle_name(update: Update, context: CallbackContext):
+    '''Сохраняет имя потенциального спикера и запрашивает контактную информацию'''
+
+    user = update.effective_user
+    entered_name = update.message.text.strip()
+
+    if not entered_name:
+        update.message.reply_text("Имя не может быть пустым. Пожалуйста, введите имя или /cancel_add_speaker.")
+        return PS_TYPING_NAME
+
+    context.user_data['prospective_speaker_name'] = entered_name
+    print(f"Организатор {user.id} ввел имя для нового спикера: {entered_name}")
+
+    update.message.reply_text(
+        f'Отлично, имя: {entered_name}.\n'
+        'Теперь введите контактную информацию (например, email, ссылка на Telegram/LinkedIn, или телефон).\n\n'
+        'Чтобы отменить, введите /cancel_add_speaker'
+    )
+    return PS_TYPING_CONTACT
+
+
+def ps_skip_notes_and_save(update: Update, context: CallbackContext):
+    '''Обрабатывает команду /skip_notes, сохраняет спикера без заметок.'''
+
+    user = update.effective_user
+    print(f"Организатор {user.id} использовал /skip_notes.")
+
+    context.user_data['prospective_speaker_notes'] = None
+
+    name = context.user_data.get('prospective_speaker_name')
+    contact = context.user_data.get('prospective_speaker_contact')
+    notes = context.user_data.get('prospective_speaker_notes')
+
+    if not name or not contact:
+        print("ОШИБКА: Потеряны имя или контакты в user_data при добавлении (пропуск заметок).")
+        update.message.reply_text("Произошла внутренняя ошибка. Пожалуйста, начните заново.")
+        context.user_data.pop('prospective_speaker_name', None)
+        context.user_data.pop('prospective_speaker_contact', None)
+        context.user_data.pop('prospective_speaker_notes', None)
+        return ConversationHandler.END
+
+    try:
+        new_prospective_speaker = ProspectiveSpeaker.objects.create(
+            name=name,
+            contact_info=contact,
+            notes=notes
+        )
+        print(f"Создана запись ProspectiveSpeaker (без заметок): ID={new_prospective_speaker.id}, Имя='{name}'")
+        update.message.reply_text(
+            f"Успешно! Потенциальный спикер '{name}' добавлен в резерв (без дополнительных заметок).\n"
+            f"Контакты: {contact}"
+        )
+    except Exception as e:
+        print(f"ОШИБКА при создании ProspectiveSpeaker (пропуск заметок): {e}")
+        update.message.reply_text("Произошла ошибка при сохранении данных. Попробуйте снова.")
+        context.user_data.pop('prospective_speaker_name', None)
+        context.user_data.pop('prospective_speaker_contact', None)
+        context.user_data.pop('prospective_speaker_notes', None)
+        return ConversationHandler.END
+
+    context.user_data.pop('prospective_speaker_name', None)
+    context.user_data.pop('prospective_speaker_contact', None)
+    context.user_data.pop('prospective_speaker_notes', None)
+
+    show_main_interface_for_role(update, context, role_name="Организатор",
+                                 greeting_message="Вы вернулись в меню организатора.")
+    return ConversationHandler.END
+
 

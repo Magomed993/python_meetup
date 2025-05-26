@@ -18,8 +18,9 @@ def get_main_keyboard():
 def get_organizer_keyboard():
     """Создает и возвращает ReplyKeyboardMarkup для Организатора."""
     keyboard_layout = [
-    [KeyboardButton('Расписание'), KeyboardButton('Поддержать')],
-    [KeyboardButton('Управление Спикерами')]
+        [KeyboardButton('Расписание'), KeyboardButton('Поддержать')],
+        [KeyboardButton('Управление Спикерами')],
+        [KeyboardButton('Добавить в резерв')],
     ]
     return ReplyKeyboardMarkup(
         keyboard=keyboard_layout,
